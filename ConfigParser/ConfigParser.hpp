@@ -434,37 +434,42 @@ namespace ConfigParser
 
 	inline void Section::DebugPrint(int indentation) const
 	{
-		for (auto& [key, value] : map)
+		const char* indent = "  ";
+
+		for (const auto& [key, value] : map)
 		{
 			for (int i = 0; i < indentation; i++)
 			{
-				std::cout << "  ";
+				std::cout << indent;
 			}
+
 			std::cout << key << ":";
 
-			if (holds_alternative<Section*>(value))
+			if (std::holds_alternative<Section*>(value))
 			{
-				for (int i = 0; i < indentation; i++)
+				std::cout << "\n";
+
+				for (int i = 0; i < indentation; ++i)
 				{
-					std::cout << "  ";
+					std::cout << indent;
 				}
-				std::cout << "\n{\n";
+
+				std::cout << "{\n";
 
 				std::get<Section*>(value)->DebugPrint(indentation + 1);
+
+				for (int i = 0; i < indentation; ++i)
+				{
+					std::cout << indent;
+				}
+
+				std::cout << "}\n";
 			}
-			else if (holds_alternative<std::string>(value))
+			else if (std::holds_alternative<std::string>(value))
 			{
-				std::cout << std::get<std::string>(value) << '\n';
+				std::cout << std::get<std::string>(value) << "\n";
 			}
 		}
-
-		for (int i = 0; i < indentation - 1; i++)
-		{
-			std::cout << "  ";
-		}
-
-		if (indentation != 0)
-			std::cout << "}\n";
 	}
 	// ----------------- Section ----------------- //
 
