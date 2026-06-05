@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <charconv>
 
 namespace ConfigParser
 {
@@ -530,38 +531,17 @@ namespace ConfigParser
 		{
 			return str;
 		}
-		else if constexpr (std::is_same_v<T, int>)
+		else if constexpr (std::is_same_v<T, int> || std::is_same_v<T, float> || std::is_same_v<T, double>)
 		{
-			try
-			{
-				return std::stoi(str);
-			}
-			catch (...)
+			T value;
+
+			auto result = std::from_chars(str.data(), str.data() + str.size(), value);
+			if (result.ec != std::errc() || result.ptr != str.data() + str.size())
 			{
 				return std::nullopt;
 			}
-		}
-		else if constexpr (std::is_same_v<T, float>)
-		{
-			try
-			{
-				return std::stof(str);
-			}
-			catch (...)
-			{
-				return std::nullopt;
-			}
-		}
-		else if constexpr (std::is_same_v<T, double>)
-		{
-			try
-			{
-				return std::stod(str);
-			}
-			catch (...)
-			{
-				return std::nullopt;
-			}
+
+			return value;
 		}
 		else if constexpr (std::is_same_v<T, bool>)
 		{
