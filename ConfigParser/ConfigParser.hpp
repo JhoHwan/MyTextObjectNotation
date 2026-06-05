@@ -40,6 +40,7 @@ namespace ConfigParser
 		void Clear();
 
 		bool ParseText();
+		void SkipUtf8Bom();
 
 		bool RemoveComments(std::string& output);
 
@@ -50,7 +51,7 @@ namespace ConfigParser
 		std::ifstream _file;
 		bool _isValid;
 
-		Section* _headSection;
+		Section* _root;
 	};
 
 	class Section
@@ -116,20 +117,20 @@ namespace ConfigParser
 	inline void Config::DebugPrint() const
 	{
 		if (!_isValid) return;
-		_headSection->DebugPrint(0);
+		_root->DebugPrint(0);
 	}
 
 	inline ValueRef Config::operator[](const std::string& key)
 	{
-		if (!IsValid() || !_headSection->map.contains(key))
+		if (!IsValid() || !_root->map.contains(key))
 			return ValueRef(nullptr);
 
-		return ValueRef(&_headSection->map[key]);
+		return ValueRef(&_root->map[key]);
 	}
 
 	inline void Config::Init()
 	{
-		_headSection = new Section();
+		_root = new Section();
 		_isValid = ParseText();
 		if (!_isValid)
 		{
@@ -144,10 +145,10 @@ namespace ConfigParser
 			_file.close();
 		}
 
-		if (_headSection == nullptr) return;
+		if (_root == nullptr) return;
 
-		delete _headSection;
-		_headSection = nullptr;
+		delete _root;
+		_root = nullptr;
 	}
 
 	inline bool Config::ParseText()
@@ -155,19 +156,22 @@ namespace ConfigParser
 		if (!_file.is_open())
 			return false;
 
+		// conf 파일 인코딩이 UTF-8 With BOM인 경우
+		SkipUtf8Bom();
+
 		std::string output;
 		bool res = RemoveComments(output);
 		if (!res) return false;
 
 		output = NormalizeText(output);
 
-		//	cout << output;
+		//std::cout << output;
 
 		bool isKey = true;
 		bool hasValueType = false;
 		bool inString = false;
 
-		Section* curSection = _headSection;
+		Section* curSection = _root;
 
 		std::string key;
 		std::string value;
@@ -270,7 +274,7 @@ namespace ConfigParser
 			value += c;
 		}
 
-		if (curSection != _headSection)
+		if (curSection != _root)
 		{
 			return false;
 		}
@@ -279,6 +283,22 @@ namespace ConfigParser
 			return false;
 
 		return true;
+	}
+
+	inline void Config::SkipUtf8Bom()
+	{
+		char bom[3];
+		_file.read(bom, 3);
+		if (_file.gcount() == 3 &&
+			static_cast<unsigned char>(bom[0]) == 0xEF &&
+			static_cast<unsigned char>(bom[1]) == 0xBB &&
+			static_cast<unsigned char>(bom[2]) == 0xBF)
+		{
+			return;
+		}
+
+		_file.clear();
+		_file.seekg(0, std::ios::beg);
 	}
 
 	inline bool Config::RemoveComments(std::string& output)
