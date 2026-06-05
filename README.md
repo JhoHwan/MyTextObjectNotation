@@ -27,26 +27,31 @@ C++로 만든 간단한 커스텀 설정 파일 파서입니다.
 ## 설정 파일 문법
 
 ```txt
-Config:
+URL: "http://google.com"
+
+ServerConfig:
 {
-    server_ip: "127.0.0.1";
-    port: 7777;
+    IpAddress: "127.0.0.1";
+    Port: 7777;
 }
 
-section1:
+PlayerConfig:
 {
-    key: value;
-    key2: "https://www.naver.com/";
-    key3: 123;
-    key4: true;
+    Name: "Alice";
+    MaxHp: 100;
+    MoveSpeed: 3.5;
+    IsEnabled: true;
+
+    NestedSection:
+    {
+        Key: value;
+        Message: "string value : {\"Test\"};";
+    }
 }
 
-section2:
+GraphicsConfig:
 {
-    key: value;
-    key2: "string value : {\"Test\"};";
-    key3: 123;
-    key4: true;
+    ScreenRatio: 1.777;
 }
 ```
 
@@ -74,7 +79,11 @@ key: value; // comment
 범위 주석:
 
 ```txt
-section1: /* block comment */
+/* 
+    block 
+    comment 
+*/
+sample_section: /* block comment */
 {
     key: value;
 }
@@ -95,7 +104,13 @@ text: "this is not /* a comment */";
 
 int main()
 {
-    ConfigParser::Config conf("config.conf");
+    ConfigParser::Config conf("Sample.conf");
+
+#ifdef _DEBUG
+    std::cout << "---------- Debug Print ----------" << std::endl;
+    conf.DebugPrint();
+    std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
+#endif
 
     if (!conf.IsValid())
     {
@@ -103,9 +118,19 @@ int main()
         return 1;
     }
 
-    std::string ip = conf["Config"]["server_ip"].As<std::string>("127.0.0.1");
-    int port = conf["Config"]["port"].As<int>(7777);
-    bool enabled = conf["section1"]["key4"].As<bool>(false);
+    // 값이 없거나 변환에 실패하면 기본값을 사용합니다.
+    std::string ip = conf["ServerConfig"]["IpAddress"].As<std::string>("127.0.0.1");
+    int port = conf["ServerConfig"]["Port"].As<int>(7777);
+    bool enabled = conf["PlayerConfig"]["IsEnabled"].As<bool>(false);
+    float speed = conf["PlayerConfig"]["MoveSpeed"].As<float>(1.0f);
+    double ratio = conf["GraphicsConfig"]["ScreenRatio"].As<double>(1.0);
+
+    // optional로 직접 성공 여부를 확인할 수도 있습니다.
+    std::optional<int> maybeHp = conf["PlayerConfig"]["MaxHp"].As<int>();
+    if (maybeHp.has_value())
+    {
+        std::cout << "hp: " << *maybeHp << '\n';
+    }
 
     std::cout << ip << ':' << port << '\n';
 }
@@ -127,13 +152,13 @@ if (conf.IsValid())
 ### 중첩 값 접근
 
 ```cpp
-auto value = conf["section1"]["key"];
+auto value = conf["PlayerConfig"]["Name"];
 ```
 
 없는 키에 접근하거나, 섹션이 아닌 값에 `operator[]`를 호출하면 invalid `ValueRef`가 반환됩니다.
 
 ```cpp
-if (!conf["section1"]["missing"].IsValid())
+if (!conf["PlayerConfig"]["Missing"].IsValid())
 {
     // 존재하지 않는 값
 }
@@ -142,7 +167,7 @@ if (!conf["section1"]["missing"].IsValid())
 ### optional 기반 변환
 
 ```cpp
-auto port = conf["Config"]["port"].As<int>();
+auto port = conf["ServerConfig"]["Port"].As<int>();
 
 if (port.has_value())
 {
@@ -153,9 +178,9 @@ if (port.has_value())
 ### 기본값 사용
 
 ```cpp
-int port = conf["Config"]["port"].As<int>(7777);
-std::string ip = conf["Config"]["server_ip"].As<std::string>("0.0.0.0");
-bool flag = conf["section1"]["key4"].As<bool>(false);
+int port = conf["ServerConfig"]["Port"].As<int>(7777);
+std::string ip = conf["ServerConfig"]["IpAddress"].As<std::string>("0.0.0.0");
+bool flag = conf["PlayerConfig"]["IsEnabled"].As<bool>(false);
 ```
 
 값이 없거나 타입 변환에 실패하면 전달한 기본값을 반환합니다.
@@ -213,5 +238,11 @@ conf.DebugPrint();
 - 줄/열 번호를 포함한 파싱 오류 보고
 - const 접근 API
 - bool 값 별칭 추가: `1`, `0`, `yes`, `no`, `on`, `off`
+
+
+
+
+
+
 
 
