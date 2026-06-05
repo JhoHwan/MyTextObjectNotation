@@ -4,6 +4,12 @@ C++로 만든 간단한 커스텀 설정 파일 파서입니다.
 
 `ConfigParser`는 섹션과 키-값 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 값은 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
 
+## 개발 환경
+
+- 개발 도구: Visual Studio / MSVC
+- 플랫폼 도구 집합: v145
+- C++ 표준: C++20
+
 ## 주요 기능
 
 - 섹션 기반 설정 파일 문법
@@ -17,7 +23,6 @@ C++로 만든 간단한 커스텀 설정 파일 파서입니다.
 - `std::optional<T>` 기반의 안전한 값 접근
 - 기본값 반환 API 제공
 - 파싱된 구조를 확인하는 `DebugPrint()` 제공
-- raw pointer 기반 소유권 관리
 
 ## 설정 파일 문법
 
@@ -85,12 +90,12 @@ text: "this is not /* a comment */";
 ## 기본 사용법
 
 ```cpp
-#include "ConfigParser.h"
+#include "ConfigParser.hpp"
 #include <iostream>
 
 int main()
 {
-    ConfigParser conf("config.conf");
+    ConfigParser::Config conf("config.conf");
 
     if (!conf.IsValid())
     {
@@ -111,7 +116,7 @@ int main()
 ### 파싱 성공 여부 확인
 
 ```cpp
-ConfigParser conf("config.conf");
+ConfigParser::Config conf("config.conf");
 
 if (conf.IsValid())
 {
@@ -186,11 +191,11 @@ conf.DebugPrint();
 
 이 프로젝트는 의도적으로 스마트 포인터 대신 raw pointer를 사용합니다.
 
-- `ConfigParser`는 루트 `Section`을 소유합니다.
+- `ConfigParser::Config`는 루트 `Section`을 소유합니다.
 - 각 `Section`은 자신의 자식 `Section`을 소유합니다.
 - `Section::parent`는 소유하지 않는 포인터입니다.
 - `Section::~Section()`은 자식 섹션을 재귀적으로 삭제합니다.
-- `ConfigParser`와 `Section`은 복사를 금지합니다.
+- `ConfigParser::Config`와 `Section`은 복사를 금지합니다.
 
 ## 현재 제한 사항
 
@@ -208,3 +213,5 @@ conf.DebugPrint();
 - 줄/열 번호를 포함한 파싱 오류 보고
 - const 접근 API
 - bool 값 별칭 추가: `1`, `0`, `yes`, `no`, `on`, `off`
+
+
