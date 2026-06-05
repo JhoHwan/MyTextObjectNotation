@@ -1,10 +1,12 @@
 ﻿#include <iostream>
 
-#include "ConfigParser.h"
+#include "ConfigParser.hpp"
+
+using ConfigParser::Config;
 
 int main()
 {
-    ConfigParser config("Config.conf");
+    Config config("Config.conf");
 
     config.DebugPrint();
 }
