@@ -31,5 +31,19 @@ int main()
         std::cout << "hp: " << *maybeHp << '\n';
     }
 
+    auto arrOpt = sample["IntArray"].AsArray<std::string>();
+    if (arrOpt.has_value())
+    {
+        auto arr = *arrOpt;
+        std::cout << "Array: [";
+        for (size_t i = 0; i < arr.size(); i++)
+        {
+            std::cout << arr[i];
+
+            if (i < arr.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]\n";
+    }
+
     std::cout << ip << ':' << port << '\n';
 }

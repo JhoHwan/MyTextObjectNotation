@@ -2,7 +2,7 @@
 
 <strong>MTON(My Text Object Notation)</strong>은 C++에서 사용할 수 있는 간단한 텍스트 기반 오브젝트 표기 형식입니다.
 
-`MTON`은 섹션과 키-값 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 값은 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
+`MTON`은 섹션, 키-값, 배열 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 일반 값과 배열 원소는 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()` 또는 `ValueRef::AsArray<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
 
 ## 개발 환경
 
@@ -16,19 +16,27 @@
 - 섹션 기반 텍스트 오브젝트 문법
 - 중첩 섹션 지원
 - `Key: Value;` 형태의 키-값 저장
+- `[A, B, C]` 형태의 배열 저장
 - `//` 줄 주석 지원
 - `/* ... */` 범위 주석 지원
 - UTF-8 with BOM 파일 처리
 - 공백이 포함된 문자열 값 지원
-- 문자열 안의 `:`, `{`, `}`, `;` 같은 문법 문자 보호
+- 문자열 안의 `:`, `{`, `}`, `;`, `//`, `/* */` 같은 문법 문자 보호
 - `\"` 이스케이프 따옴표 처리
 - `std::optional<T>` 기반의 안전한 값 접근
+- `std::optional<std::vector<T>>` 기반의 안전한 배열 접근
 - 기본값 반환 API 제공
 - 파싱된 구조를 확인하는 `DebugPrint()` 제공
 
 ## MTON 문법 예시
 
 ```txt
+RootKey: 1;
+
+EmptyArray: [];
+StringArray: ["Apple", "Banana", Cook];
+IntArray: [1, 2, 3];
+
 URL: "http://google.com";
 
 ServerConfig:
@@ -61,12 +69,16 @@ GraphicsConfig:
 
 - 일반 값은 `Key: Value;` 형태로 작성합니다.
 - 섹션은 `SectionName: { ... }` 형태로 작성합니다.
-- 일반 값은 반드시 `;`로 끝나야 합니다.
+- 배열은 `Key: [Value1, Value2, Value3];` 형태로 작성합니다.
+- 일반 값과 배열은 반드시 `;`로 끝나야 합니다.
 - 섹션은 반드시 `}`로 닫아야 합니다.
-- 문자열 밖의 공백과 탭은 무시됩니다.
+- 문자열 밖의 탭은 공백으로 정규화됩니다.
+- 문자열 밖에서 Key와 Value 내부 공백은 허용하지 않습니다.
 - 문자열은 `"..."`로 감쌀 수 있습니다.
-- 문자열 안에서는 공백과 `:`, `{`, `}`, `;` 같은 문자를 값으로 사용할 수 있습니다.
+- 문자열 안에서는 공백과 `:`, `{`, `}`, `;`, `,`, `[`, `]` 같은 문자를 값으로 사용할 수 있습니다.
 - 문자열 안에서 따옴표를 넣고 싶으면 `\"`를 사용합니다.
+- 빈 배열 `[]`을 사용할 수 있습니다.
+- 빈 문자열 배열 원소 `""`을 사용할 수 있습니다.
 - 같은 섹션 안에서 중복 키는 허용하지 않습니다.
 - 섹션 이름과 키 이름은 `PascalCase`를 권장합니다.
 
@@ -107,19 +119,19 @@ Text: "this is not /* a comment */";
 
 int main()
 {
-    mton::Object sample("Sample.mton");
-
-#ifdef _DEBUG
-    std::cout << "---------- Debug Print ----------" << std::endl;
-    sample.DebugPrint();
-    std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
-#endif
+    mton::Object sample = mton::Parser::ParseFile("Sample.mton");
 
     if (!sample.IsValid())
     {
         std::cout << "Invalid MTON file\n";
         return 1;
     }
+
+#ifdef _DEBUG
+    std::cout << "---------- Debug Print ----------" << std::endl;
+    sample.DebugPrint();
+    std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
+#endif
 
     std::string ip = sample["ServerConfig"]["IpAddress"].As<std::string>("127.0.0.1");
     int port = sample["ServerConfig"]["Port"].As<int>(7777);
@@ -133,17 +145,32 @@ int main()
         std::cout << "hp: " << *maybeHp << '\n';
     }
 
+    auto fruits = sample["StringArray"].AsArray<std::string>();
+    if (fruits.has_value())
+    {
+        for (const std::string& fruit : *fruits)
+        {
+            std::cout << fruit << '\n';
+        }
+    }
+
     std::cout << ip << ':' << port << '\n';
 }
 ```
 
 ## API
 
+### 파일 파싱
+
+```cpp
+mton::Object sample = mton::Parser::ParseFile("Sample.mton");
+```
+
+파싱에 실패하면 invalid `Object`가 반환됩니다.
+
 ### 파싱 성공 여부 확인
 
 ```cpp
-mton::Object sample("Sample.mton");
-
 if (sample.IsValid())
 {
     // 파싱 성공
@@ -186,9 +213,26 @@ bool flag = sample["PlayerConfig"]["IsEnabled"].As<bool>(false);
 
 값이 없거나 타입 변환에 실패하면 전달한 기본값을 반환합니다.
 
+### 배열 변환
+
+```cpp
+auto names = sample["StringArray"].AsArray<std::string>();
+auto numbers = sample["IntArray"].AsArray<int>();
+
+if (numbers.has_value())
+{
+    for (int number : *numbers)
+    {
+        std::cout << number << '\n';
+    }
+}
+```
+
+배열이 아니거나 배열 원소 중 하나라도 타입 변환에 실패하면 `std::nullopt`를 반환합니다. 빈 배열 `[]`은 성공한 빈 `std::vector<T>`로 반환됩니다.
+
 ## 지원 타입
 
-현재 `ValueRef::As<T>()`가 지원하는 타입입니다.
+현재 `ValueRef::As<T>()`와 `ValueRef::AsArray<T>()`가 지원하는 타입입니다.
 
 - `std::string`
 - `int`
@@ -222,20 +266,21 @@ sample.DebugPrint();
 - `Section::parent`는 소유하지 않는 포인터입니다.
 - `Section::~Section()`은 자식 섹션을 재귀적으로 삭제합니다.
 - `mton::Object`와 `Section`은 복사를 금지합니다.
+- `mton::Object`는 이동 생성과 이동 대입을 지원합니다.
+- `mton::Object`와 `mton::ValueRef`는 읽기 전용 API만 제공합니다.
 
 ## 현재 제한 사항
 
-- 배열 파싱은 아직 구현하지 않았습니다.
-- `Value`에는 `std::vector<std::string>` 타입이 준비되어 있지만 아직 API로 사용하지 않습니다.
 - 파싱 실패 시 상세 에러 메시지는 아직 제공하지 않습니다.
 - 저장/직렬화 기능은 아직 구현하지 않았습니다.
+- 배열 기본값 반환 API는 아직 제공하지 않습니다.
+- 사용자 정의 타입 변환기는 아직 제공하지 않습니다.
 
 ## 앞으로 추가하면 좋은 기능
 
-- 배열 문법과 `AsArray<T>()`
-- `Parser`와 `Serializer` 역할 분리
+- `AsArray<T>(defaultValue)` 기본값 API
+- `Serializer` 추가
 - `ValueConverter<T>` 기반 타입 변환 분리
 - `GetError()` 또는 에러 메시지 저장
 - 줄/열 번호를 포함한 파싱 오류 보고
-- const 접근 API
 - bool 값 별칭 추가: `1`, `0`, `yes`, `no`, `on`, `off`

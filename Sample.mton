@@ -1,5 +1,12 @@
 ﻿// Root-level values can be accessed directly from the config object.
 RootKey: 1;
+//StringTest: "1"1;
+
+EmptyArray1: [];
+EmptyArray2: [""];
+EmptyArray3: ["", apple, ""];
+StringArray: ["Apple", "Banana", Cook];
+IntArray: [1, Apple, 3];
 
 // Comment markers inside strings are preserved as part of the value.
 URL: "http://google.com";

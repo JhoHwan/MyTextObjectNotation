@@ -42,7 +42,6 @@ namespace mton
 		void DebugPrint() const;
 
 		ValueRef operator[](const std::string& key) const;
-		
 
 	private:
 		void Clear();
@@ -102,7 +101,13 @@ namespace mton
 		std::optional<T> As() const;
 
 		template <typename T>
+		std::optional<std::vector<T>> AsArray() const;
+
+		template <typename T>
 		T As(const T& defaultVal) const;
+
+		template <typename T>
+		std::optional<std::vector<T>> AsArray(const std::vector<T>& defaultArr) const;
 
 		inline bool IsValid() const { return _value != nullptr; }
 
@@ -111,11 +116,9 @@ namespace mton
 	};
 }
 
-
 namespace mton
 {
 	// ----------------- Config ----------------- //
-
 	inline Object::Object(Section* rootSection = nullptr) : _root(rootSection)
 	{}
 
@@ -218,6 +221,19 @@ namespace mton
 			else if (std::holds_alternative<std::string>(value))
 			{
 				std::cout << std::get<std::string>(value) << "\n";
+			}
+			else if (auto arrPtr = std::get_if<std::vector<std::string>>(&value))
+			{
+				const std::vector<std::string>& arr = *arrPtr;
+				std::cout << '[';
+				for (size_t i = 0; i < arr.size(); i++)
+				{
+					if(arr[i].empty()) std::cout << "\"\"";
+					else std::cout << arr[i];
+
+					if (i < arr.size() - 1) std::cout << ", ";
+				}
+				std::cout << "]\n";
 			}
 		}
 	}
@@ -360,13 +376,17 @@ namespace mton
 	{
 		bool isKey = true;
 		bool hasValueType = false;
-		bool inString = false;
+		bool stringMode = false;
+		bool stringModeEnd = false;
 		bool keyEndedBySpace = false;
+		bool arrayMode = false;
+		bool emptyArr = false;
 
 		Section* curSection = root;
 
 		std::string key;
 		std::string value;
+		std::vector<std::string> arr;
 
 		for (size_t i = 0; i < str.size(); i++)
 		{
@@ -381,7 +401,7 @@ namespace mton
 				continue;
 			}
 
-			if (inString)
+			if (stringMode)
 			{
 				if (c == '\\' && next == '"')
 				{
@@ -392,7 +412,8 @@ namespace mton
 
 				if (c == '"')
 				{
-					inString = false;
+					stringMode = false;
+					stringModeEnd = true;
 					continue;
 				}
 
@@ -463,27 +484,74 @@ namespace mton
 					continue;
 				}
 
-				// String Type
-
-				// String 모드 시작
-				if (c == '"')
-				{
-					inString = true;
-					hasValueType = true;
-					continue; // "는 value에 미포함
-				}
-
 				hasValueType = true;
 
+				if (c == '[')
+				{
+					arrayMode = true;
+					continue;
+				}
+
+				// String Type
+
+			}
+
+			// String 모드 시작
+			if (c == '"')
+			{
+				stringMode = true;
+				continue; // "는 value에 미포함
+			}
+
+			if (c == ']' || c == ',')
+			{
+				if (!arrayMode)
+				{
+					return false;
+				}
+
+				if (c == ']')
+				{
+					arrayMode = false;
+
+					// 빈 배열 허용
+					if (arr.empty() && value.empty() && !stringModeEnd)
+					{
+						emptyArr = true;
+						continue;
+					}
+				}
+
+				if (value.empty() && !stringModeEnd) return false;
+
+				stringModeEnd = false;
+				arr.emplace_back(std::move(value));
+				value.clear();
+
+				continue;
 			}
 
 			if (c == ';')
 			{
-				if (!hasValueType) return false;
+				if (!hasValueType || arrayMode)
+				{
+					return false;
+				}
 
-				curSection->map[key] = value;
+				if (!arr.empty() || emptyArr)
+				{
+					arrayMode = false;
+					emptyArr = false;
+					curSection->map[key] = std::move(arr);
+				}
+				else
+				{
+					curSection->map[key] = value;
+				}
+
 				isKey = true;
 				hasValueType = false;
+				stringModeEnd = false;
 
 				value.clear();
 				key.clear();
@@ -491,10 +559,28 @@ namespace mton
 				continue;
 			}
 
+			if (stringModeEnd)
+			{
+				return false;
+			}
+
+			if (arrayMode)
+			{
+				if (c == ' ') continue;
+			}
+
+			// String모드가 아닌 Value에 공백 불가
 			if (c == ' ')
 			{
 				return false;
 			}
+
+			// Array모드 종료 후 값 추가 예외처리
+			if (!arrayMode && !arr.empty())
+			{
+				return false;
+			}
+
 			value += c;
 		}
 
@@ -503,7 +589,7 @@ namespace mton
 			return false;
 		}
 
-		if (!isKey || inString || !key.empty() || !value.empty())
+		if (!isKey || stringMode || !key.empty() || !value.empty())
 			return false;
 
 		return true;
@@ -516,7 +602,7 @@ namespace mton
 			if (c == ' ') return false;
 			if (c == '_') continue;
 
-			if (!std::isalnum(c)) return false;
+			if (!std::isalnum(static_cast<unsigned char>(c))) return false;
 		}
 
 		return true;
@@ -631,9 +717,59 @@ namespace mton
 	}
 
 	template<typename T>
+	inline std::optional<std::vector<T>> ValueRef::AsArray() const
+	{
+		if (!IsValid()) return std::nullopt;
+
+		auto arrPtr = std::get_if<std::vector<std::string>>(_value);
+		if (!arrPtr) return std::nullopt;
+
+		const std::vector<std::string>& arr = *arrPtr;
+		if constexpr (std::is_same_v<T, std::string>)
+		{
+			return arr;
+		}
+		else if constexpr (std::is_same_v<T, int> || std::is_same_v<T, float> || std::is_same_v<T, double>)
+		{
+			std::vector<T> newArr;
+			for (const auto& str : arr)
+			{
+				T value;
+				auto result = std::from_chars(str.data(), str.data() + str.size(), value);
+				if (result.ec != std::errc() || result.ptr != str.data() + str.size())
+				{
+					return std::nullopt;
+				}
+				newArr.push_back(value);
+			}
+
+			return newArr;
+		}
+		else if constexpr (std::is_same_v<T, bool>)
+		{
+			std::vector<bool> newArr;
+
+			for (const auto& str : arr)
+			{
+				if (str == "true" || str == "True") newArr.push_back(true);
+				else if (str == "False" || str == "false") newArr.push_back(false);
+				else return std::nullopt;
+			}
+
+			return newArr;
+		}
+		return std::nullopt;
+	}
+
+	template<typename T>
 	inline T ValueRef::As(const T& defaultVal) const
 	{
 		return As<T>().value_or(defaultVal);
+	}
+	template<typename T>
+	inline std::optional<std::vector<T>> ValueRef::AsArray(const std::vector<T>& defaultArr) const
+	{
+		return AsArray<T>().value_or(defaultArr);
 	}
 	// ----------------- ValueRef ----------------- //
 }
