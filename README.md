@@ -1,6 +1,6 @@
 ﻿# MTON
 
-**MTON(My Text Object Notation)**은 C++에서 사용할 수 있는 간단한 텍스트 기반 오브젝트 표기 형식입니다.
+<strong>MTON(My Text Object Notation)</strong>은 C++에서 사용할 수 있는 간단한 텍스트 기반 오브젝트 표기 형식입니다.
 
 `MTON`은 섹션과 키-값 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 값은 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
 
