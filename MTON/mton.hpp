@@ -41,8 +41,10 @@ namespace mton
 
 		void DebugPrint() const;
 
-		ValueRef operator[](const std::string& key);
+		ValueRef operator[](const std::string& key) const;
+		
 
+	private:
 		void Clear();
 
 	private:
@@ -90,11 +92,11 @@ namespace mton
 	class ValueRef 
 	{
 	public:
-		ValueRef(Value* ref);
+		ValueRef(const Value* ref);
 		~ValueRef() = default;
 
 	public:
-		ValueRef operator[](const std::string& key);
+		ValueRef operator[](const std::string& key) const;
 
 		template <typename T>
 		std::optional<T> As() const;
@@ -105,7 +107,7 @@ namespace mton
 		inline bool IsValid() const { return _value != nullptr; }
 
 	private:
-		Value* _value;
+		const Value* _value;
 	};
 }
 
@@ -148,12 +150,13 @@ namespace mton
 		_root->DebugPrint(0);
 	}
 
-	inline ValueRef Object::operator[](const std::string& key)
+	inline ValueRef Object::operator[](const std::string& key) const
 	{
-		if (!IsValid() || !_root->map.contains(key))
-			return ValueRef(nullptr);
+		if (!IsValid()) return ValueRef(nullptr);
 
-		return ValueRef(&_root->map[key]);
+		auto it = _root->map.find(key);
+		if (it == _root->map.end()) return ValueRef(nullptr);
+		return ValueRef(&it->second);
 	}
 
 	inline void Object::Clear()
@@ -570,22 +573,22 @@ namespace mton
 	// ----------------- Parser ----------------- //
 
 	// ----------------- ValueRef ----------------- //
-	inline ValueRef::ValueRef(Value* value) : _value(value)
+	inline ValueRef::ValueRef(const Value* value) : _value(value)
 	{
 
 	}
 
-	inline ValueRef ValueRef::operator[](const std::string& key)
+	inline ValueRef ValueRef::operator[](const std::string& key) const
 	{
 		if (!IsValid()) return ValueRef(nullptr);
 
-		Section** sectionPtr = get_if<Section*>(_value);
+		Section* const * sectionPtr = get_if<Section*>(_value);
 		if (!sectionPtr) return ValueRef(nullptr);
 
-		Section* section = *sectionPtr;
+		const Section* section = *sectionPtr;
 		if (!section->map.contains(key)) return ValueRef(nullptr);
 
-		return ValueRef(&section->map[key]);
+		return ValueRef(&section->map.at(key));
 	}
 
 	template<typename T>
@@ -594,7 +597,7 @@ namespace mton
 		if (!IsValid()) return std::nullopt;
 
 		// Section, Array, Monostate일 때는 값 변환 불가
-		std::string* strPtr = std::get_if<std::string>(_value);
+		const std::string* strPtr = std::get_if<std::string>(_value);
 		if (strPtr == nullptr)
 		{
 			return std::nullopt;
