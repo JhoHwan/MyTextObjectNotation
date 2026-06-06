@@ -3,19 +3,19 @@
 
 int main()
 {
-    mton::Object sample("Sample.mton");
-
-#ifdef _DEBUG
-    std::cout << "---------- Debug Print ----------" << std::endl;
-    sample.DebugPrint();
-    std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
-#endif
+    mton::Object sample = mton::Parser::ParseFile("Sample.mton");
 
     if (!sample.IsValid())
     {
         std::cout << "Invalid config\n";
         return 1;
     }
+
+#ifdef _DEBUG
+    std::cout << "---------- Debug Print ----------" << std::endl;
+    sample.DebugPrint();
+    std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
+#endif
 
     // 값이 없거나 변환에 실패하면 기본값을 사용합니다.
     std::string ip = sample["ServerConfig"]["IpAddress"].As<std::string>("127.0.0.1");
