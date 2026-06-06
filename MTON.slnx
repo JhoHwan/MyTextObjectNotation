@@ -3,8 +3,8 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="ConfigParser/ConfigParser.vcxproj" Id="3942c56b-b293-40f1-a9f3-831e5207ad79" />
+  <Project Path="MTON/MTON.vcxproj.vcxproj" Id="3942c56b-b293-40f1-a9f3-831e5207ad79" />
   <Project Path="Test/Test.vcxproj" Id="1498b4c8-e612-4536-80ce-1ab7f03d641f">
-    <BuildDependency Project="ConfigParser/ConfigParser.vcxproj" />
+    <BuildDependency Project="MTON/MTON.vcxproj.vcxproj" />
   </Project>
 </Solution>

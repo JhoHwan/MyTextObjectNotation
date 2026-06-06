@@ -1,22 +1,24 @@
-﻿# ConfigParser
+﻿# MTON
 
-C++로 만든 간단한 커스텀 설정 파일 파서입니다.
+**MTON(My Text Object Notation)**은 C++에서 사용할 수 있는 간단한 텍스트 기반 오브젝트 표기 형식입니다.
 
-`ConfigParser`는 섹션과 키-값 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 값은 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
+`MTON`은 섹션과 키-값 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 값은 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
 
 ## 개발 환경
 
 - 개발 도구: Visual Studio / MSVC
 - 플랫폼 도구 집합: v145
 - C++ 표준: C++20
+- 배포 형태: `mton.hpp` 단일 헤더
 
 ## 주요 기능
 
-- 섹션 기반 설정 파일 문법
+- 섹션 기반 텍스트 오브젝트 문법
 - 중첩 섹션 지원
-- `key: value;` 형태의 키-값 저장
+- `Key: Value;` 형태의 키-값 저장
 - `//` 줄 주석 지원
 - `/* ... */` 범위 주석 지원
+- UTF-8 with BOM 파일 처리
 - 공백이 포함된 문자열 값 지원
 - 문자열 안의 `:`, `{`, `}`, `;` 같은 문법 문자 보호
 - `\"` 이스케이프 따옴표 처리
@@ -24,10 +26,10 @@ C++로 만든 간단한 커스텀 설정 파일 파서입니다.
 - 기본값 반환 API 제공
 - 파싱된 구조를 확인하는 `DebugPrint()` 제공
 
-## 설정 파일 문법
+## MTON 문법 예시
 
 ```txt
-URL: "http://google.com"
+URL: "http://google.com";
 
 ServerConfig:
 {
@@ -57,8 +59,8 @@ GraphicsConfig:
 
 ## 문법 규칙
 
-- 일반 값은 `key: value;` 형태로 작성합니다.
-- 섹션은 `sectionName: { ... }` 형태로 작성합니다.
+- 일반 값은 `Key: Value;` 형태로 작성합니다.
+- 섹션은 `SectionName: { ... }` 형태로 작성합니다.
 - 일반 값은 반드시 `;`로 끝나야 합니다.
 - 섹션은 반드시 `}`로 닫아야 합니다.
 - 문자열 밖의 공백과 탭은 무시됩니다.
@@ -66,6 +68,7 @@ GraphicsConfig:
 - 문자열 안에서는 공백과 `:`, `{`, `}`, `;` 같은 문자를 값으로 사용할 수 있습니다.
 - 문자열 안에서 따옴표를 넣고 싶으면 `\"`를 사용합니다.
 - 같은 섹션 안에서 중복 키는 허용하지 않습니다.
+- 섹션 이름과 키 이름은 `PascalCase`를 권장합니다.
 
 ## 주석
 
@@ -73,60 +76,58 @@ GraphicsConfig:
 
 ```txt
 // comment
-key: value; // comment
+Key: value; // comment
 ```
 
 범위 주석:
 
 ```txt
-/* 
-    block 
-    comment 
+/*
+    block
+    comment
 */
-sample_section: /* block comment */
+SampleSection: /* block comment */
 {
-    key: value;
+    Key: value;
 }
 ```
 
 문자열 안의 주석 기호는 주석으로 처리하지 않습니다.
 
 ```txt
-url: "https://example.com";
-text: "this is not /* a comment */";
+URL: "https://example.com";
+Text: "this is not /* a comment */";
 ```
 
 ## 기본 사용법
 
 ```cpp
-#include "ConfigParser.hpp"
+#include "mton.hpp"
 #include <iostream>
 
 int main()
 {
-    ConfigParser::Config conf("Sample.conf");
+    mton::Object sample("Sample.mton");
 
 #ifdef _DEBUG
     std::cout << "---------- Debug Print ----------" << std::endl;
-    conf.DebugPrint();
+    sample.DebugPrint();
     std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
 #endif
 
-    if (!conf.IsValid())
+    if (!sample.IsValid())
     {
-        std::cout << "Invalid config\n";
+        std::cout << "Invalid MTON file\n";
         return 1;
     }
 
-    // 값이 없거나 변환에 실패하면 기본값을 사용합니다.
-    std::string ip = conf["ServerConfig"]["IpAddress"].As<std::string>("127.0.0.1");
-    int port = conf["ServerConfig"]["Port"].As<int>(7777);
-    bool enabled = conf["PlayerConfig"]["IsEnabled"].As<bool>(false);
-    float speed = conf["PlayerConfig"]["MoveSpeed"].As<float>(1.0f);
-    double ratio = conf["GraphicsConfig"]["ScreenRatio"].As<double>(1.0);
+    std::string ip = sample["ServerConfig"]["IpAddress"].As<std::string>("127.0.0.1");
+    int port = sample["ServerConfig"]["Port"].As<int>(7777);
+    bool enabled = sample["PlayerConfig"]["IsEnabled"].As<bool>(false);
+    float speed = sample["PlayerConfig"]["MoveSpeed"].As<float>(1.0f);
+    double ratio = sample["GraphicsConfig"]["ScreenRatio"].As<double>(1.0);
 
-    // optional로 직접 성공 여부를 확인할 수도 있습니다.
-    std::optional<int> maybeHp = conf["PlayerConfig"]["MaxHp"].As<int>();
+    std::optional<int> maybeHp = sample["PlayerConfig"]["MaxHp"].As<int>();
     if (maybeHp.has_value())
     {
         std::cout << "hp: " << *maybeHp << '\n';
@@ -141,9 +142,9 @@ int main()
 ### 파싱 성공 여부 확인
 
 ```cpp
-ConfigParser::Config conf("config.conf");
+mton::Object sample("Sample.mton");
 
-if (conf.IsValid())
+if (sample.IsValid())
 {
     // 파싱 성공
 }
@@ -152,13 +153,13 @@ if (conf.IsValid())
 ### 중첩 값 접근
 
 ```cpp
-auto value = conf["PlayerConfig"]["Name"];
+auto value = sample["PlayerConfig"]["Name"];
 ```
 
 없는 키에 접근하거나, 섹션이 아닌 값에 `operator[]`를 호출하면 invalid `ValueRef`가 반환됩니다.
 
 ```cpp
-if (!conf["PlayerConfig"]["Missing"].IsValid())
+if (!sample["PlayerConfig"]["Missing"].IsValid())
 {
     // 존재하지 않는 값
 }
@@ -167,7 +168,7 @@ if (!conf["PlayerConfig"]["Missing"].IsValid())
 ### optional 기반 변환
 
 ```cpp
-auto port = conf["ServerConfig"]["Port"].As<int>();
+auto port = sample["ServerConfig"]["Port"].As<int>();
 
 if (port.has_value())
 {
@@ -178,9 +179,9 @@ if (port.has_value())
 ### 기본값 사용
 
 ```cpp
-int port = conf["ServerConfig"]["Port"].As<int>(7777);
-std::string ip = conf["ServerConfig"]["IpAddress"].As<std::string>("0.0.0.0");
-bool flag = conf["PlayerConfig"]["IsEnabled"].As<bool>(false);
+int port = sample["ServerConfig"]["Port"].As<int>(7777);
+std::string ip = sample["ServerConfig"]["IpAddress"].As<std::string>("0.0.0.0");
+bool flag = sample["PlayerConfig"]["IsEnabled"].As<bool>(false);
 ```
 
 값이 없거나 타입 변환에 실패하면 전달한 기본값을 반환합니다.
@@ -207,7 +208,7 @@ False
 ## 디버그 출력
 
 ```cpp
-conf.DebugPrint();
+sample.DebugPrint();
 ```
 
 파싱된 섹션 트리를 `std::cout`으로 출력합니다.
@@ -216,31 +217,25 @@ conf.DebugPrint();
 
 이 프로젝트는 의도적으로 스마트 포인터 대신 raw pointer를 사용합니다.
 
-- `ConfigParser::Config`는 루트 `Section`을 소유합니다.
+- `mton::Object`는 루트 `Section`을 소유합니다.
 - 각 `Section`은 자신의 자식 `Section`을 소유합니다.
 - `Section::parent`는 소유하지 않는 포인터입니다.
 - `Section::~Section()`은 자식 섹션을 재귀적으로 삭제합니다.
-- `ConfigParser::Config`와 `Section`은 복사를 금지합니다.
+- `mton::Object`와 `Section`은 복사를 금지합니다.
 
 ## 현재 제한 사항
 
 - 배열 파싱은 아직 구현하지 않았습니다.
 - `Value`에는 `std::vector<std::string>` 타입이 준비되어 있지만 아직 API로 사용하지 않습니다.
 - 파싱 실패 시 상세 에러 메시지는 아직 제공하지 않습니다.
+- 저장/직렬화 기능은 아직 구현하지 않았습니다.
 
 ## 앞으로 추가하면 좋은 기능
 
 - 배열 문법과 `AsArray<T>()`
+- `Parser`와 `Serializer` 역할 분리
 - `ValueConverter<T>` 기반 타입 변환 분리
 - `GetError()` 또는 에러 메시지 저장
 - 줄/열 번호를 포함한 파싱 오류 보고
 - const 접근 API
 - bool 값 별칭 추가: `1`, `0`, `yes`, `no`, `on`, `off`
-
-
-
-
-
-
-
-

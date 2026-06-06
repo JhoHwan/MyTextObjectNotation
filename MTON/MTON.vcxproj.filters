@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ConfigParser.hpp">
+    <ClInclude Include="mton.hpp">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

@@ -22,9 +22,9 @@
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{3942c56b-b293-40f1-a9f3-831e5207ad79}</ProjectGuid>
-    <RootNamespace>ConfigParser</RootNamespace>
+    <RootNamespace>mton</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>ConfigParser</ProjectName>
+    <ProjectName>MTON</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -130,7 +130,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="ConfigParser.hpp" />
+    <ClInclude Include="mton.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

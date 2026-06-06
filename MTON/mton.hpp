@@ -11,24 +11,24 @@
 #include <vector>
 #include <charconv>
 
-namespace ConfigParser
+namespace mton
 {
     class Section;
     class ValueRef;
-    class Config;
+    class Object;
 
     using Value = std::variant<std::monostate, std::string, std::vector<std::string>, class Section*>;
 
-	class Config
+	class Object
 	{
 	public:
-		Config(const char* path);
-		Config(const std::filesystem::path& path);
+		Object(const char* path);
+		Object(const std::filesystem::path& path);
 
-		Config(const Config&) = delete;
-		Config& operator=(const Config&) = delete;
+		Object(const Object&) = delete;
+		Object& operator=(const Object&) = delete;
 
-		~Config();
+		~Object();
 
 		inline bool IsValid() const { return _isValid; }
 
@@ -57,7 +57,7 @@ namespace ConfigParser
 
 	class Section
 	{
-		friend class Config;
+		friend class Object;
 		friend class ValueRef;
 	private:
 		Section() = default;
@@ -97,31 +97,31 @@ namespace ConfigParser
 }
 
 
-namespace ConfigParser
+namespace mton
 {
 	// ----------------- Config ----------------- //
-	inline Config::Config(const char* path) : _file(path)
+	inline Object::Object(const char* path) : _file(path)
 	{
 		Init();
 	}
 
-	inline Config::Config(const std::filesystem::path& path) : _file(path)
+	inline Object::Object(const std::filesystem::path& path) : _file(path)
 	{
 		Init();
 	}
 
-	inline Config::~Config()
+	inline Object::~Object()
 	{
 		Clear();
 	}
 
-	inline void Config::DebugPrint() const
+	inline void Object::DebugPrint() const
 	{
 		if (!_isValid) return;
 		_root->DebugPrint(0);
 	}
 
-	inline ValueRef Config::operator[](const std::string& key)
+	inline ValueRef Object::operator[](const std::string& key)
 	{
 		if (!IsValid() || !_root->map.contains(key))
 			return ValueRef(nullptr);
@@ -129,7 +129,7 @@ namespace ConfigParser
 		return ValueRef(&_root->map[key]);
 	}
 
-	inline void Config::Init()
+	inline void Object::Init()
 	{
 		_root = new Section();
 		_isValid = ParseText();
@@ -139,7 +139,7 @@ namespace ConfigParser
 		}
 	}
 
-	inline void Config::Clear()
+	inline void Object::Clear()
 	{
 		if (_file.is_open())
 		{
@@ -152,7 +152,7 @@ namespace ConfigParser
 		_root = nullptr;
 	}
 
-	inline bool Config::ParseText()
+	inline bool Object::ParseText()
 	{
 		if (!_file.is_open())
 			return false;
@@ -286,7 +286,7 @@ namespace ConfigParser
 		return true;
 	}
 
-	inline void Config::SkipUtf8Bom()
+	inline void Object::SkipUtf8Bom()
 	{
 		char bom[3];
 		_file.read(bom, 3);
@@ -302,7 +302,7 @@ namespace ConfigParser
 		_file.seekg(0, std::ios::beg);
 	}
 
-	inline bool Config::RemoveComments(std::string& output)
+	inline bool Object::RemoveComments(std::string& output)
 	{
 		bool inString = false;
 		bool inCommentBlock = false;
@@ -389,7 +389,7 @@ namespace ConfigParser
 		return true;
 	}
 
-	inline void Config::Trim(std::string& str)
+	inline void Object::Trim(std::string& str)
 	{
 		auto start = str.find_first_not_of(" \t");
 		if (start == std::string::npos)
@@ -402,7 +402,7 @@ namespace ConfigParser
 		str = str.substr(start, end - start + 1);
 	}
 
-	inline std::string Config::NormalizeText(const std::string& in)
+	inline std::string Object::NormalizeText(const std::string& in)
 	{
 		std::string out;
 
