@@ -1,29 +1,30 @@
-﻿// Root-level values can be accessed directly from the config object.
+﻿// MTON sample file
+// Values are stored as strings internally and converted by ValueRef::As<T>().
+
 RootKey: 1;
-//StringTest: "1"1;
-
-EmptyArray1: [];
-EmptyArray2: [""];
-EmptyArray3: ["", apple, ""];
-StringArray: ["Apple", "Banana", Cook];
-IntArray: [1, Apple, 3];
-
-// Comment markers inside strings are preserved as part of the value.
 URL: "http://google.com";
+
+// Arrays can contain strings, numbers, bool-like strings, and empty strings.
+EmptyArray: [];
+StringArray: ["Apple", "Banana", Cook];
+EscapedStringArray: ["\"Ant\"", Apple, ""];
+PortArray: [7777, 8888, 9999];
+
+// This array is intentionally mixed to demonstrate conversion failure for As<vector<int>>().
+MixedArray: [1, Apple, 3];
 
 /*
     Block comments can span multiple lines.
-    Everything inside this block is ignored by the parser.
+    Comment markers inside quoted strings are preserved as string data.
 */
+CommentText: "this is not /* a comment */ and not // a comment";
 
-// ServerConfig stores network-related settings.
 ServerConfig:
 {
     IpAddress: "127.0.0.1";
     Port: 7777;
 }
 
-// PlayerConfig demonstrates string, integer, float, and bool values.
 PlayerConfig:
 {
     Name: "Alice";
@@ -31,17 +32,13 @@ PlayerConfig:
     MoveSpeed: 3.5;
     IsEnabled: true;
 
-    // Nested sections are accessed by chaining operator[].
     NestedSection:
     {
         Key: value;
-
-        // Syntax characters inside strings do not terminate the value.
         Message: "string value : {\"Test\"};";
     }
 }
 
-// GraphicsConfig demonstrates a floating-point setting.
 GraphicsConfig:
 {
     ScreenRatio: 1.777;

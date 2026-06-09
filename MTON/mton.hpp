@@ -21,6 +21,7 @@ namespace mton
     class Object;
 	class Parser;
 	class Serializer;
+	class Writer;
 
 	template <typename T>
 	inline constexpr bool always_false_v = false;
@@ -45,6 +46,31 @@ namespace mton
 	{
 		{ T::FromMton(ref, out) } -> std::convertible_to<bool>;
 	};
+
+	template <typename T>
+	concept MtonWritable = requires(const T & object, Writer & writer)
+	{
+		{ ToMton(writer, object) };
+	};
+
+	template <typename T>
+	concept MtonMemberWritable = requires(const T & object, Writer & writer)
+	{
+		{ object.ToMton(writer) };
+	};
+
+	template <typename T>
+	concept MtonStaticWritable = requires(const T & object, Writer & writer)
+	{
+		{ T::ToMton(writer, object) };
+	};
+
+	template <typename T>
+	concept Number =
+		[]<typename U = std::remove_cvref_t<T>>()
+		{
+			return std::is_same_v<U, int> || std::is_same_v<U, float> || std::is_same_v<U, double>;
+		}();
 
 	using Value = std::variant<std::monostate, std::string, std::vector<std::string>, class Section*>;
 
@@ -82,6 +108,8 @@ namespace mton
 		friend class Parser;
 		friend class Object;
 		friend class ValueRef;
+		friend class Writer;
+		friend class Serializer;
 
 	private:
 		Section() = default;
@@ -91,7 +119,7 @@ namespace mton
 		Section& operator=(const Section&) = delete;
 
 	private:
-		void DebugPrint(int indentation) const;
+		void SerializeTo(std::ostream& os, int indentation) const;
 
 	private:
 		Section* parent = nullptr;
@@ -126,7 +154,7 @@ namespace mton
 		inline static std::optional<Error> _lastError;
 	};
 
-	class ValueRef 
+	class ValueRef
 	{
 	public:
 		ValueRef(const Value* ref);
@@ -153,11 +181,44 @@ namespace mton
 		const Value* _value;
 	};
 
+	class Serializer
+	{
+	private:
+		Serializer() = delete;
+
+	public:
+		template <typename T>
+		static bool SaveFile(const std::filesystem::path& path, const T& object);
+	};
+
+	class Writer
+	{
+		friend class Serializer;
+
+	private:
+		Writer(mton::Section* section);
+
+	public:
+		template <Number T>
+		void Value(std::string_view key, T value);
+
+		void Value(std::string_view key, bool value);
+		void Value(std::string_view key, std::string value);
+
+		template <typename T>
+		void Array(const std::string& key, const std::vector<T>& array);
+
+		template <typename T>
+		void Section(const std::string& key, const T& object);
+
+	private:
+		mton::Section* _section;
+	};
 }
 
 namespace mton
 {
-	// ----------------- Config ----------------- //
+	// ----------------- Object ----------------- //
 	inline Object::Object(Section* rootSection = nullptr) : _root(rootSection)
 	{}
 
@@ -189,7 +250,7 @@ namespace mton
 	inline void Object::DebugPrint() const
 	{
 		if (!IsValid()) return;
-		_root->DebugPrint(0);
+		_root->SerializeTo(std::cout, 0);
 	}
 
 	inline ValueRef Object::operator[](const std::string& key) const
@@ -208,9 +269,7 @@ namespace mton
 		delete _root;
 		_root = nullptr;
 	}
-
-	// ----------------- Config ----------------- //
-
+	// ----------------- Object ----------------- //
 
 	// ----------------- Section ----------------- //
 	inline Section::~Section()
@@ -224,55 +283,56 @@ namespace mton
 		}
 	}
 
-	inline void Section::DebugPrint(int indentation) const
+	inline void Section::SerializeTo(std::ostream& os, int indentation = 0) const
 	{
-		const char* indent = "  ";
+		const char* indent = "\t";
 
 		for (const auto& [key, value] : map)
 		{
 			for (int i = 0; i < indentation; i++)
 			{
-				std::cout << indent;
+				os << indent;
 			}
 
-			std::cout << key << ":";
+			os << key << ":";
 
 			if (std::holds_alternative<Section*>(value))
 			{
-				std::cout << "\n";
+				os << "\n";
 
 				for (int i = 0; i < indentation; ++i)
 				{
-					std::cout << indent;
+					os << indent;
 				}
 
-				std::cout << "{\n";
+				os << "{\n";
 
-				std::get<Section*>(value)->DebugPrint(indentation + 1);
+				std::get<Section*>(value)->SerializeTo(os, indentation + 1);
 
 				for (int i = 0; i < indentation; ++i)
 				{
-					std::cout << indent;
+					os << indent;
 				}
 
-				std::cout << "}\n";
+				os << "}\n";
 			}
 			else if (std::holds_alternative<std::string>(value))
 			{
-				std::cout << std::get<std::string>(value) << "\n";
+				std::string str = std::get<std::string>(value);
+
+				os << "\"" << str << "\";\n";
 			}
 			else if (auto arrPtr = std::get_if<std::vector<std::string>>(&value))
 			{
 				const std::vector<std::string>& arr = *arrPtr;
-				std::cout << '[';
+				os << '[';
 				for (size_t i = 0; i < arr.size(); i++)
 				{
-					if(arr[i].empty()) std::cout << "\"\"";
-					else std::cout << arr[i];
+					os << "\"" << arr[i] << "\"";
 
-					if (i < arr.size() - 1) std::cout << ", ";
+					if (i < arr.size() - 1) os << ", ";
 				}
-				std::cout << "]\n";
+				os << "];\n";
 			}
 		}
 	}
@@ -887,7 +947,7 @@ namespace mton
 		{
 			return arr;
 		}
-		else if constexpr (std::is_same_v<T, int> || std::is_same_v<T, float> || std::is_same_v<T, double>)
+		else if constexpr (Number<T>)
 		{
 			std::vector<T> newArr;
 			for (const auto& str : arr)
@@ -930,4 +990,140 @@ namespace mton
 		return AsArray<T>().value_or(defaultArr);
 	}
 	// ----------------- ValueRef ----------------- //
+
+	// ----------------- Writer ----------------- //
+	inline Writer::Writer(mton::Section* section) : _section(section)
+	{
+
+	}
+
+	template <Number T>
+	inline void Writer::Value(std::string_view key, T value)
+	{
+		_section->map[std::string(key)] = std::format("{}", value);
+	}
+
+
+	inline void Writer::Value(std::string_view key, bool value)
+	{
+		_section->map[std::string(key)] = value ? "true" : "false";
+	}
+
+	inline void Writer::Value(std::string_view key, std::string value)
+	{
+		size_t pos = 0;
+		while ((pos = value.find('"', pos)) != std::string::npos)
+		{
+			value.replace(pos, 1, "\\\"");
+			pos += 2;
+		}
+
+		_section->map[std::string(key)] = value;
+	}
+
+	template<typename T>
+	inline void Writer::Array(const std::string& key, const std::vector<T>& array)
+	{
+	if constexpr (std::is_same_v<T, std::string>)
+	{
+		std::vector<std::string> strArr;
+		strArr.reserve(array.size());
+
+		for (std::string value : array)
+		{
+			size_t pos = 0;
+			while ((pos = value.find('"', pos)) != std::string::npos)
+			{
+				value.replace(pos, 1, "\\\"");
+				pos += 2;
+			}
+
+			strArr.push_back(std::move(value));
+		}
+
+		_section->map[key] = std::move(strArr);
+	}
+		else if constexpr (Number<T>)
+		{
+			std::vector<std::string> strArr;
+			strArr.reserve(array.size());
+
+			for (const auto& item : array)
+			{
+				strArr.push_back(std::format("{}", item));
+			}
+
+			_section->map[key] = std::move(strArr);
+		}
+	}
+
+	template<typename T>
+	inline void Writer::Section(const std::string& key, const T& object)
+	{
+		if constexpr (MtonWritable<T>)
+		{
+			mton::Section* newSection = new mton::Section();
+			_section->map[key] = newSection;
+
+			Writer writer(newSection);
+			ToMton(writer, object);
+		}
+		else if constexpr (MtonMemberWritable<T>)
+		{
+			mton::Section* newSection = new mton::Section();
+			_section->map[key] = newSection;
+
+			Writer writer(newSection);
+			object.ToMton(writer);
+		}
+		else if constexpr (MtonStaticWritable<T>)
+		{
+			mton::Section* newSection = new mton::Section();
+			_section->map[key] = newSection;
+
+			Writer writer(newSection);
+			T::ToMton(writer, object);
+		}
+	}
+	// ----------------- Writer ----------------- //
+
+	// ----------------- Serializer ----------------- //
+	template <typename T>
+	inline bool Serializer::SaveFile(const std::filesystem::path& path, const T& object)
+	{
+		std::ofstream file(path);
+		if (!file.is_open())
+		{
+			return false;
+		}
+
+		Section* root = new Section();
+		Writer writer(root);
+
+		if constexpr (MtonWritable<T>)
+		{
+			ToMton(writer, object);
+		}
+		else if constexpr (MtonMemberWritable<T>)
+		{
+			object.ToMton(writer);
+		}
+		else if constexpr (MtonStaticWritable<T>)
+		{
+			T::ToMton(writer, object);
+		}
+		else
+		{
+			delete root;
+			return false;
+		}
+
+		root->SerializeTo(file);
+		delete root;
+
+		file.flush();
+		file.close();
+
+		return true;
+	}
 }
