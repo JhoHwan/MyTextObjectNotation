@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <concepts>
 
 namespace mton
 {
@@ -18,8 +19,24 @@ namespace mton
     class ValueRef;
     class Object;
 	class Parser;
+	class Serializer;
 
-    using Value = std::variant<std::monostate, std::string, std::vector<std::string>, class Section*>;
+	template <typename>
+	inline constexpr bool always_false_v = false;
+
+	template <typename T>
+	concept MtonReadable = requires(const ValueRef & ref, T & out)
+	{
+		{ FromMton(ref, out) } -> std::convertible_to<bool>;
+	};
+
+	template <typename T>
+	concept MtonStaticReadable = requires(const ValueRef & ref, T & out)
+	{
+		{ T::FromMton(ref, out) } -> std::convertible_to<bool>;
+	};
+
+	using Value = std::variant<std::monostate, std::string, std::vector<std::string>, class Section*>;
 
 	class Object
 	{
@@ -114,6 +131,7 @@ namespace mton
 	private:
 		const Value* _value;
 	};
+
 }
 
 namespace mton
@@ -178,7 +196,7 @@ namespace mton
 	{
 		for (auto& [_, value] : map)
 		{
-			if (holds_alternative<Section*>(value))
+			if (std::holds_alternative<Section*>(value))
 			{
 				delete std::get<Section*>(value);
 			}
@@ -682,38 +700,62 @@ namespace mton
 	{
 		if (!IsValid()) return std::nullopt;
 
-		// Section, Array, Monostate일 때는 값 변환 불가
-		const std::string* strPtr = std::get_if<std::string>(_value);
-		if (strPtr == nullptr)
-		{
-			return std::nullopt;
-		}
+		const std::string* str = std::get_if<std::string>(_value);
 
-		const std::string& str = *strPtr;
 		if constexpr (std::is_same_v<T, std::string>)
 		{
-			return str;
+			if (!str) return std::nullopt;
+			return *str;
 		}
 		else if constexpr (std::is_same_v<T, int> || std::is_same_v<T, float> || std::is_same_v<T, double>)
 		{
-			T value;
+			if (!str) return std::nullopt;
 
-			auto result = std::from_chars(str.data(), str.data() + str.size(), value);
-			if (result.ec != std::errc() || result.ptr != str.data() + str.size())
-			{
+			T value{};
+			auto result = std::from_chars(str->data(), str->data() + str->size(), value);
+			if (result.ec != std::errc() || result.ptr != str->data() + str->size())
 				return std::nullopt;
-			}
 
 			return value;
 		}
 		else if constexpr (std::is_same_v<T, bool>)
 		{
-			if (str == "true" || str == "True") return true;
-			else if (str == "False" || str == "false") return false;
+			if (!str) return std::nullopt;
+
+			if (*str == "true" || *str == "True") return true;
+			if (*str == "false" || *str == "False") return false;
+
 			return std::nullopt;
 		}
+		else if constexpr (MtonReadable<T>)
+		{
+			if (!std::holds_alternative<Section*>(*_value))
+				return std::nullopt;
 
-		return std::nullopt;
+			T value{};
+			if (FromMton(*this, value))
+				return value;
+
+			return std::nullopt;
+		}
+		else if constexpr (MtonStaticReadable<T>)
+		{
+			if (!std::holds_alternative<Section*>(*_value))
+				return std::nullopt;
+
+			T value{};
+			if (T::FromMton(*this, value))
+				return value;
+
+			return std::nullopt;
+		}
+		else
+		{
+			static_assert(
+				always_false_v<T>,
+				"mton::ValueRef::As<T>() requires FromMton(const mton::ValueRef&, T&) or T::FromMton(const mton::ValueRef&, T&) for custom types."
+				);
+		}
 	}
 
 	template<typename T>

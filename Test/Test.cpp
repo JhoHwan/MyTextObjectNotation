@@ -1,6 +1,38 @@
 ﻿#include "mton.hpp"
 #include <iostream>
 
+struct ServerConfig
+{
+    std::string IpAddress;
+    int Port;
+
+    static bool FromMton(const mton::ValueRef& ref, ServerConfig& out)
+    {
+        auto ip = ref["IpAddress"].As<std::string>();
+        auto port = ref["Port"].As<int>();
+
+        if (!ip || !port)
+            return false;
+
+        out.IpAddress = *ip;
+        out.Port = *port;
+        return true;
+    }
+};
+
+bool FromMton(const mton::ValueRef& ref, ServerConfig& out)
+{
+    auto ip = ref["IpAddress"].As<std::string>();
+    auto port = ref["Port"].As<int>();
+
+    if (!ip || !port)
+        return false;
+
+    out.IpAddress = *ip;
+    out.Port = *port;
+    return true;
+}
+
 int main()
 {
     mton::Object sample = mton::Parser::ParseFile("Sample.mton");
@@ -18,8 +50,7 @@ int main()
 #endif
 
     // 값이 없거나 변환에 실패하면 기본값을 사용합니다.
-    std::string ip = sample["ServerConfig"]["IpAddress"].As<std::string>("127.0.0.1");
-    int port = sample["ServerConfig"]["Port"].As<int>(7777);
+    ServerConfig config = sample["ServerConfig"].As<ServerConfig>({});
     bool enabled = sample["PlayerConfig"]["IsEnabled"].As<bool>(false);
     float speed = sample["PlayerConfig"]["MoveSpeed"].As<float>(1.0f);
     double ratio = sample["GraphicsConfig"]["ScreenRatio"].As<double>(1.0);
@@ -45,5 +76,5 @@ int main()
         std::cout << "]\n";
     }
 
-    std::cout << ip << ':' << port << '\n';
+    std::cout << config.IpAddress << ':' << config.Port << '\n';
 }
