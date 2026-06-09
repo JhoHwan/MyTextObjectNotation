@@ -279,11 +279,28 @@ namespace mton
 	// ----------------- Section ----------------- //
 
 	// ----------------- Parser ----------------- //
+	inline bool Parser::GetError(std::string& errorMsg)
+	{
+		if (!_lastError.has_value()) return false;
+		errorMsg = std::format("Line {}: {}", _lastError->Line, _lastError->Message);
+		return true;
+	}
+
+	inline void Parser::SetError(size_t line, const std::string& message)
+	{
+		_lastError = Error{ line, message };
+	}
+
 	inline Object Parser::ParseFile(const std::filesystem::path& path)
 	{
+		_lastError = std::nullopt;
+
 		std::ifstream file(path);
 		if (!file.is_open())
+		{
+			SetError(0, "Failed to open file.");
 			return {};
+		}
 
 		// conf 파일 인코딩이 UTF-8 With BOM인 경우
 		SkipUtf8Bom(file);
