@@ -26,6 +26,7 @@ namespace mton
 	template <typename T>
 	inline constexpr bool always_false_v = false;
 
+	// As<std::vector<T>>() 처리를 위해 std::vector인지 판별하는 타입 특성입니다.
 	template <typename T>
 	struct is_std_vector : public std::false_type {};
 
@@ -35,36 +36,42 @@ namespace mton
 		using value_type = T;
 	};
 
+	// 전역 FromMton(const ValueRef&, T&) 함수가 있으면 사용자 타입으로 읽을 수 있습니다.
 	template <typename T>
 	concept MtonReadable = requires(const ValueRef & ref, T & out)
 	{
 		{ FromMton(ref, out) } -> std::convertible_to<bool>;
 	};
 
+	// static T::FromMton(const ValueRef&, T&) 함수가 있으면 사용자 타입으로 읽을 수 있습니다.
 	template <typename T>
 	concept MtonStaticReadable = requires(const ValueRef & ref, T & out)
 	{
 		{ T::FromMton(ref, out) } -> std::convertible_to<bool>;
 	};
 
+	// 전역 ToMton(Writer&, const T&) 함수가 있으면 사용자 타입을 저장할 수 있습니다.
 	template <typename T>
 	concept MtonWritable = requires(const T & object, Writer & writer)
 	{
 		{ ToMton(writer, object) };
 	};
 
+	// 멤버 object.ToMton(Writer&) 함수가 있으면 사용자 타입을 저장할 수 있습니다.
 	template <typename T>
 	concept MtonMemberWritable = requires(const T & object, Writer & writer)
 	{
 		{ object.ToMton(writer) };
 	};
 
+	// static T::ToMton(Writer&, const T&) 함수가 있으면 사용자 타입을 저장할 수 있습니다.
 	template <typename T>
 	concept MtonStaticWritable = requires(const T & object, Writer & writer)
 	{
 		{ T::ToMton(writer, object) };
 	};
 
+	// MTON 기본 숫자 타입입니다. const/reference가 붙어도 같은 숫자 타입으로 취급합니다.
 	template <typename T>
 	concept Number =
 		[]<typename U = std::remove_cvref_t<T>>()
@@ -72,8 +79,12 @@ namespace mton
 			return std::is_same_v<U, int> || std::is_same_v<U, float> || std::is_same_v<U, double>;
 		}();
 
+	// MTON 값 저장 타입입니다. 일반 값과 배열 원소는 문자열로 저장합니다.
 	using Value = std::variant<std::monostate, std::string, std::vector<std::string>, class Section*>;
 
+	/// <summary>
+	/// Parser가 만든 읽기 전용 MTON 문서입니다.
+	/// </summary>
 	class Object
 	{
 		friend class Parser;
@@ -90,10 +101,22 @@ namespace mton
 
 		~Object();
 
+		/// <summary>
+		/// 파싱에 성공한 Object인지 확인합니다.
+		/// </summary>
+		/// <returns>루트 Section을 가지고 있으면 true입니다.</returns>
 		inline bool IsValid() const { return _root != nullptr; }
 
+		/// <summary>
+		/// 현재 Object를 MTON 형태로 std::cout에 출력합니다.
+		/// </summary>
 		void DebugPrint() const;
 
+		/// <summary>
+		/// 루트 Section에서 key에 해당하는 값을 찾습니다.
+		/// </summary>
+		/// <param name="key">찾을 key입니다.</param>
+		/// <returns>값이 없으면 invalid ValueRef를 반환합니다.</returns>
 		ValueRef operator[](const std::string& key) const;
 
 	private:
@@ -103,6 +126,9 @@ namespace mton
 		Section* _root;
 	};
 
+	/// <summary>
+	/// 내부 트리 노드입니다. 사용자는 Section을 직접 만들거나 소유하지 않습니다.
+	/// </summary>
 	class Section
 	{
 		friend class Parser;
@@ -126,6 +152,9 @@ namespace mton
 		std::unordered_map<std::string, Value> map;
 	};
 
+	/// <summary>
+	/// MTON 파일을 Object로 파싱하는 static 전용 클래스입니다.
+	/// </summary>
 	class Parser
 	{
 	private:
@@ -139,8 +168,20 @@ namespace mton
 		Parser() = delete;
 
 	public:
+		/// <summary>
+		/// 파일을 읽어 MTON Object로 파싱합니다.
+		/// </summary>
+		/// <param name="path">읽을 MTON 파일 경로입니다.</param>
+		/// <returns>성공하면 valid Object, 실패하면 invalid Object를 반환합니다.</returns>
 		static Object ParseFile(const std::filesystem::path& path);
+
+		/// <summary>
+		/// 마지막 파싱 실패 메시지를 가져옵니다.
+		/// </summary>
+		/// <param name="errorMsg">"Line N: message" 형식의 메시지를 받을 문자열입니다.</param>
+		/// <returns>저장된 오류가 있으면 true입니다.</returns>
 		static bool GetError(std::string& errorMsg);
+
 	private:
 		static void Trim(std::string& str);
 		static std::string NormalizeText(const std::string& in);
@@ -154,6 +195,9 @@ namespace mton
 		inline static std::optional<Error> _lastError;
 	};
 
+	/// <summary>
+	/// Object 내부 값에 대한 읽기 전용 참조입니다.
+	/// </summary>
 	class ValueRef
 	{
 	public:
@@ -161,36 +205,80 @@ namespace mton
 		~ValueRef() = default;
 
 	public:
+		/// <summary>
+		/// 현재 값이 Section일 때 자식 key에 접근합니다.
+		/// </summary>
+		/// <param name="key">찾을 key입니다.</param>
+		/// <returns>값이 없거나 Section이 아니면 invalid ValueRef를 반환합니다.</returns>
 		ValueRef operator[](const std::string& key) const;
 
+		/// <summary>
+		/// 값을 원하는 타입으로 변환합니다.
+		/// </summary>
+		/// <typeparam name="T">std::string, int, float, double, bool, std::vector<T>, 사용자 타입을 지원합니다.</typeparam>
+		/// <returns>변환에 성공하면 값, 실패하면 std::nullopt입니다.</returns>
 		template <typename T>
 		std::optional<T> As() const;
 
+		/// <summary>
+		/// 배열 값을 원하는 원소 타입의 vector로 변환합니다.
+		/// </summary>
+		/// <typeparam name="T">std::string, int, float, double, bool을 지원합니다.</typeparam>
+		/// <returns>변환에 성공하면 vector, 실패하면 std::nullopt입니다.</returns>
 		template <typename T>
 		std::optional<std::vector<T>> AsArray() const;
 
+		/// <summary>
+		/// 값을 원하는 타입으로 변환하고, 실패하면 기본값을 반환합니다.
+		/// </summary>
+		/// <typeparam name="T">변환할 타입입니다.</typeparam>
+		/// <param name="defaultVal">값이 없거나 변환 실패 시 반환할 기본값입니다.</param>
+		/// <returns>변환 결과 또는 기본값입니다.</returns>
 		template <typename T>
 		T As(const T& defaultVal) const;
 
+		/// <summary>
+		/// 배열 값을 변환하고, 실패하면 기본 배열을 반환합니다.
+		/// </summary>
+		/// <typeparam name="T">배열 원소 타입입니다.</typeparam>
+		/// <param name="defaultArr">값이 없거나 변환 실패 시 반환할 기본 배열입니다.</param>
+		/// <returns>변환 결과 또는 기본 배열입니다.</returns>
 		template <typename T>
 		std::optional<std::vector<T>> AsArray(const std::vector<T>& defaultArr) const;
 
+		/// <summary>
+		/// 유효한 값을 가리키는지 확인합니다.
+		/// </summary>
+		/// <returns>참조하는 값이 있으면 true입니다.</returns>
 		inline bool IsValid() const { return _value != nullptr; }
 
 	private:
 		const Value* _value;
 	};
 
+	/// <summary>
+	/// 사용자 타입을 MTON 파일로 저장하는 static 전용 클래스입니다.
+	/// </summary>
 	class Serializer
 	{
 	private:
 		Serializer() = delete;
 
 	public:
+		/// <summary>
+		/// object를 MTON 파일로 저장합니다.
+		/// </summary>
+		/// <typeparam name="T">ToMton을 제공하는 사용자 타입입니다.</typeparam>
+		/// <param name="path">저장할 파일 경로입니다.</param>
+		/// <param name="object">저장할 객체입니다.</param>
+		/// <returns>파일 저장에 성공하면 true입니다.</returns>
 		template <typename T>
 		static bool SaveFile(const std::filesystem::path& path, const T& object);
 	};
 
+	/// <summary>
+	/// ToMton 함수 안에서 MTON 값을 작성하는 빌더입니다.
+	/// </summary>
 	class Writer
 	{
 		friend class Serializer;
@@ -199,15 +287,44 @@ namespace mton
 		Writer(mton::Section* section);
 
 	public:
+		/// <summary>
+		/// 숫자 값을 작성합니다.
+		/// </summary>
+		/// <typeparam name="T">int, float, double입니다.</typeparam>
+		/// <param name="key">저장할 key입니다.</param>
+		/// <param name="value">저장할 숫자 값입니다.</param>
 		template <Number T>
 		void Value(std::string_view key, T value);
 
+		/// <summary>
+		/// bool 값을 작성합니다.
+		/// </summary>
+		/// <param name="key">저장할 key입니다.</param>
+		/// <param name="value">저장할 bool 값입니다.</param>
 		void Value(std::string_view key, bool value);
+
+		/// <summary>
+		/// 문자열 값을 작성합니다. Serializer 출력 시 따옴표로 저장됩니다.
+		/// </summary>
+		/// <param name="key">저장할 key입니다.</param>
+		/// <param name="value">저장할 문자열 값입니다.</param>
 		void Value(std::string_view key, std::string value);
 
+		/// <summary>
+		/// 단순 값 배열을 작성합니다.
+		/// </summary>
+		/// <typeparam name="T">std::string, int, float, double, bool을 지원합니다.</typeparam>
+		/// <param name="key">저장할 key입니다.</param>
+		/// <param name="array">저장할 배열입니다.</param>
 		template <typename T>
 		void Array(const std::string& key, const std::vector<T>& array);
 
+		/// <summary>
+		/// 중첩 Section을 작성합니다.
+		/// </summary>
+		/// <typeparam name="T">ToMton을 제공하는 사용자 타입입니다.</typeparam>
+		/// <param name="key">저장할 Section key입니다.</param>
+		/// <param name="object">저장할 객체입니다.</param>
 		template <typename T>
 		void Section(const std::string& key, const T& object);
 
