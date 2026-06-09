@@ -62,7 +62,7 @@ int main()
         std::cout << "hp: " << *maybeHp << '\n';
     }
 
-    auto arrOpt = sample["IntArray"].AsArray<std::string>();
+    auto arrOpt = sample["IntArray"].As<std::vector<std::string>>();
     if (arrOpt.has_value())
     {
         auto arr = *arrOpt;

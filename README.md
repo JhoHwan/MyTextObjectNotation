@@ -2,7 +2,7 @@
 
 <strong>MTON(My Text Object Notation)</strong>은 C++에서 사용할 수 있는 간단한 텍스트 기반 오브젝트 표기 형식입니다.
 
-`MTON`은 섹션, 키-값, 배열 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 일반 값과 배열 원소는 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()` 또는 `ValueRef::AsArray<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
+`MTON`은 섹션, 키-값, 배열 구조를 가진 텍스트 파일을 읽어서 메모리에 저장합니다. 일반 값과 배열 원소는 내부적으로 문자열로 저장하고, 사용할 때 `ValueRef::As<T>()`, `ValueRef::As<std::vector<T>>()`, 또는 `ValueRef::AsArray<T>()`를 통해 원하는 타입으로 변환해서 가져옵니다.
 
 ## 개발 환경
 
@@ -24,8 +24,10 @@
 - 문자열 안의 `:`, `{`, `}`, `;`, `//`, `/* */` 같은 문법 문자 보호
 - `\"` 이스케이프 따옴표 처리
 - `std::optional<T>` 기반의 안전한 값 접근
-- `std::optional<std::vector<T>>` 기반의 안전한 배열 접근
+- `As<std::vector<T>>()`와 `AsArray<T>()` 기반의 안전한 배열 접근
 - 기본값 반환 API 제공
+- 전역 `FromMton` 또는 static `T::FromMton` 기반 사용자 타입 변환 지원
+- 지원하지 않는 사용자 타입은 컴파일 타임 에러로 감지
 - 파싱된 구조를 확인하는 `DebugPrint()` 제공
 
 ## MTON 문법 예시
@@ -145,7 +147,7 @@ int main()
         std::cout << "hp: " << *maybeHp << '\n';
     }
 
-    auto fruits = sample["StringArray"].AsArray<std::string>();
+    auto fruits = sample["StringArray"].As<std::vector<std::string>>();
     if (fruits.has_value())
     {
         for (const std::string& fruit : *fruits)
@@ -215,9 +217,11 @@ bool flag = sample["PlayerConfig"]["IsEnabled"].As<bool>(false);
 
 ### 배열 변환
 
+배열은 `As<std::vector<T>>()` 또는 `AsArray<T>()`로 가져올 수 있습니다.
+
 ```cpp
-auto names = sample["StringArray"].AsArray<std::string>();
-auto numbers = sample["IntArray"].AsArray<int>();
+auto names = sample["StringArray"].As<std::vector<std::string>>();
+auto numbers = sample["IntArray"].As<std::vector<int>>();
 
 if (numbers.has_value())
 {
@@ -228,17 +232,96 @@ if (numbers.has_value())
 }
 ```
 
+명시적으로 배열 API를 사용하고 싶으면 `AsArray<T>()`를 사용할 수도 있습니다.
+
+```cpp
+auto names = sample["StringArray"].AsArray<std::string>();
+auto numbers = sample["IntArray"].AsArray<int>();
+```
+
 배열이 아니거나 배열 원소 중 하나라도 타입 변환에 실패하면 `std::nullopt`를 반환합니다. 빈 배열 `[]`은 성공한 빈 `std::vector<T>`로 반환됩니다.
+
+### 배열 기본값 사용
+
+```cpp
+std::vector<int> defaultNumbers = { 1, 2, 3 };
+std::vector<int> numbers = sample["MissingArray"].As<std::vector<int>>(defaultNumbers);
+```
+
+`AsArray<T>()`를 사용할 때는 아래처럼 작성할 수 있습니다.
+
+```cpp
+std::vector<int> defaultNumbers = { 1, 2, 3 };
+auto numbers = sample["MissingArray"].AsArray<int>(defaultNumbers);
+```
+
+배열이 없거나 타입 변환에 실패하면 전달한 기본 배열을 반환합니다.
+
+### 사용자 타입 변환
+
+섹션을 구조체나 클래스로 직접 변환하고 싶으면 `FromMton` 함수를 정의합니다.
+
+```cpp
+struct ServerConfig
+{
+    std::string IpAddress;
+    int Port;
+};
+
+bool FromMton(const mton::ValueRef& ref, ServerConfig& out)
+{
+    auto ip = ref["IpAddress"].As<std::string>();
+    auto port = ref["Port"].As<int>();
+
+    if (!ip || !port)
+        return false;
+
+    out.IpAddress = *ip;
+    out.Port = *port;
+    return true;
+}
+
+std::optional<ServerConfig> config = sample["ServerConfig"].As<ServerConfig>();
+```
+
+타입 내부에 static 함수로 정의할 수도 있습니다.
+
+```cpp
+struct ServerConfig
+{
+    std::string IpAddress;
+    int Port;
+
+    static bool FromMton(const mton::ValueRef& ref, ServerConfig& out)
+    {
+        auto ip = ref["IpAddress"].As<std::string>();
+        auto port = ref["Port"].As<int>();
+
+        if (!ip || !port)
+            return false;
+
+        out.IpAddress = *ip;
+        out.Port = *port;
+        return true;
+    }
+};
+
+ServerConfig config = sample["ServerConfig"].As<ServerConfig>({});
+```
+
+사용자 타입에 전역 `FromMton` 또는 static `T::FromMton`이 없으면 컴파일 에러가 발생합니다.
 
 ## 지원 타입
 
-현재 `ValueRef::As<T>()`와 `ValueRef::AsArray<T>()`가 지원하는 타입입니다.
+현재 `ValueRef::As<T>()`, `ValueRef::As<std::vector<T>>()`, `ValueRef::AsArray<T>()`가 지원하는 타입입니다.
 
 - `std::string`
 - `int`
 - `float`
 - `double`
 - `bool`
+- 전역 `FromMton` 또는 static `T::FromMton`을 제공하는 사용자 타입
+- 위 타입의 `std::vector<T>` 배열
 
 현재 bool 값은 아래 문자열을 지원합니다.
 
@@ -273,12 +356,10 @@ sample.DebugPrint();
 
 - 파싱 실패 시 상세 에러 메시지는 아직 제공하지 않습니다.
 - 저장/직렬화 기능은 아직 구현하지 않았습니다.
-- 배열 기본값 반환 API는 아직 제공하지 않습니다.
-- 사용자 정의 타입 변환기는 아직 제공하지 않습니다.
+- 사용자 타입 배열 변환은 아직 제공하지 않습니다.
 
 ## 앞으로 추가하면 좋은 기능
 
-- `AsArray<T>(defaultValue)` 기본값 API
 - `Serializer` 추가
 - `ValueConverter<T>` 기반 타입 변환 분리
 - `GetError()` 또는 에러 메시지 저장

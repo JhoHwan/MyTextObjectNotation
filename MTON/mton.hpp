@@ -21,8 +21,17 @@ namespace mton
 	class Parser;
 	class Serializer;
 
-	template <typename>
+	template <typename T>
 	inline constexpr bool always_false_v = false;
+
+	template <typename T>
+	struct is_std_vector : public std::false_type {};
+
+	template <typename T, typename Alloc>
+	struct is_std_vector<std::vector<T, Alloc>> : public std::true_type
+	{
+		using value_type = T;
+	};
 
 	template <typename T>
 	concept MtonReadable = requires(const ValueRef & ref, T & out)
@@ -748,6 +757,11 @@ namespace mton
 				return value;
 
 			return std::nullopt;
+		}
+		else if constexpr (is_std_vector<T>::value)
+		{
+			using ElementType = typename is_std_vector<T>::value_type;
+			return AsArray<ElementType>();
 		}
 		else
 		{
