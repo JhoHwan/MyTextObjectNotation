@@ -249,9 +249,3 @@ sample.DebugPrint();
 - `std::wstring`은 지원하지 않습니다. UTF-8 기반 `std::string` 사용을 권장합니다.
 - 사용자 타입 배열과 섹션 배열은 지원하지 않습니다.
 - 저장 출력 순서는 내부 `std::unordered_map` 순서의 영향을 받을 수 있습니다.
-
-## 앞으로 추가하면 좋은 기능
-
-- 저장 순서 보존
-- `ValueConverter<T>` 기반 타입 변환 분리
-- bool 값 별칭 추가: `1`, `0`, `yes`, `no`, `on`, `off`
