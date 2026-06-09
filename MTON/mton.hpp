@@ -4,6 +4,7 @@
 #include <charconv>
 #include <filesystem>
 #include <fstream>
+#include <format>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -100,11 +101,18 @@ namespace mton
 	class Parser
 	{
 	private:
+		struct Error
+		{
+			size_t Line = 0;
+			std::string Message;
+		};
+
+	private:
 		Parser() = delete;
 
 	public:
 		static Object ParseFile(const std::filesystem::path& path);
-
+		static bool GetError(std::string& errorMsg);
 	private:
 		static void Trim(std::string& str);
 		static std::string NormalizeText(const std::string& in);
@@ -112,6 +120,10 @@ namespace mton
 		static bool RemoveComments(std::ifstream& file, std::string& output);
 		static bool ParseFromString(const std::string& str, Section* root);
 		static bool CheckKeyStringIsValid(const std::string& key);
+		static void SetError(size_t line, const std::string& message);
+
+	private:
+		inline static std::optional<Error> _lastError;
 	};
 
 	class ValueRef 
@@ -316,12 +328,15 @@ namespace mton
 	{
 		bool inString = false;
 		bool inCommentBlock = false;
+		size_t lineNumber = 0;
+		size_t stringStartLine = 0;
+		size_t commentStartLine = 0;
 
 		std::string line;
 		while (std::getline(file, line))
 		{
+			lineNumber++;
 			Trim(line);
-			if (line.empty()) continue;
 
 			std::string cleanedLine;
 			for (size_t i = 0; i < line.size(); i++)
@@ -363,6 +378,7 @@ namespace mton
 				if (curChar == '"')
 				{
 					inString = true;
+					stringStartLine = lineNumber;
 					cleanedLine += '"';
 					continue;
 				}
@@ -371,6 +387,7 @@ namespace mton
 				if (curChar == '/' && nextChar == '*')
 				{
 					inCommentBlock = true;
+					commentStartLine = lineNumber;
 					i++;
 					continue;
 				}
@@ -378,27 +395,26 @@ namespace mton
 				// 줄 주석 발견 시 현재 줄 스킵
 				if (curChar == '/' && nextChar == '/') break;
 
-
 				cleanedLine += curChar;
 			}
 
-			if (cleanedLine.empty()) continue;
 			output += cleanedLine;
 			output += '\n';
 		}
 
 		if (inString)
 		{
+			SetError(stringStartLine, "Unclosed string literal.");
 			return false;
 		}
 		if (inCommentBlock)
 		{
+			SetError(commentStartLine, "Unclosed block comment.");
 			return false;
 		}
 
 		return true;
 	}
-
 	inline bool Parser::ParseFromString(const std::string& str, Section* root)
 	{
 		bool isKey = true;
@@ -408,6 +424,9 @@ namespace mton
 		bool keyEndedBySpace = false;
 		bool arrayMode = false;
 		bool emptyArr = false;
+
+		size_t lineNumber = 1;
+		size_t stringStartLine = 0;
 
 		Section* curSection = root;
 
@@ -423,8 +442,12 @@ namespace mton
 			if (c == '\n')
 			{
 				if (!isKey && hasValueType)
+				{
+					SetError(lineNumber, "Expected ';' after value.");
 					return false;
+				}
 
+				lineNumber++;
 				continue;
 			}
 
@@ -450,11 +473,19 @@ namespace mton
 
 			if (c == '}')
 			{
-				if (!isKey) return false;
+				if (!isKey)
+				{
+					SetError(lineNumber, "Unexpected '}' while parsing value.");
+					return false;
+				}
 
 				curSection = curSection->parent;
 
-				if (curSection == nullptr) return false;
+				if (curSection == nullptr)
+				{
+					SetError(lineNumber, "Unexpected closing brace.");
+					return false;
+				}
 
 				isKey = true;
 				hasValueType = false;
@@ -467,8 +498,24 @@ namespace mton
 
 			if (c == ':')
 			{
-				if (!isKey || key.empty() || !CheckKeyStringIsValid(key) || curSection->map.contains(key))
+				if (!isKey)
 				{
+					SetError(lineNumber, "Unexpected ':' while parsing value.");
+					return false;
+				}
+				if (key.empty())
+				{
+					SetError(lineNumber, "Missing key before ':'.");
+					return false;
+				}
+				if (!CheckKeyStringIsValid(key))
+				{
+					SetError(lineNumber, "Invalid key. Only letters, digits, and '_' are allowed.");
+					return false;
+				}
+				if (curSection->map.contains(key))
+				{
+					SetError(lineNumber, "Duplicated key.");
 					return false;
 				}
 
@@ -482,11 +529,15 @@ namespace mton
 			{
 				if (c == ' ')
 				{
-					if (!key.empty())  keyEndedBySpace = true;
+					if (!key.empty()) keyEndedBySpace = true;
 				}
 				else
 				{
-					if (keyEndedBySpace) return false;
+					if (keyEndedBySpace)
+					{
+						SetError(lineNumber, "Whitespace is not allowed inside key.");
+						return false;
+					}
 					key += c;
 				}
 
@@ -520,13 +571,13 @@ namespace mton
 				}
 
 				// String Type
-
 			}
 
 			// String 모드 시작
 			if (c == '"')
 			{
 				stringMode = true;
+				stringStartLine = lineNumber;
 				continue; // "는 value에 미포함
 			}
 
@@ -534,6 +585,7 @@ namespace mton
 			{
 				if (!arrayMode)
 				{
+					SetError(lineNumber, "Unexpected array delimiter.");
 					return false;
 				}
 
@@ -549,7 +601,11 @@ namespace mton
 					}
 				}
 
-				if (value.empty() && !stringModeEnd) return false;
+				if (value.empty() && !stringModeEnd)
+				{
+					SetError(lineNumber, "Array element cannot be empty.");
+					return false;
+				}
 
 				stringModeEnd = false;
 				arr.emplace_back(std::move(value));
@@ -560,8 +616,14 @@ namespace mton
 
 			if (c == ';')
 			{
-				if (!hasValueType || arrayMode)
+				if (!hasValueType)
 				{
+					SetError(lineNumber, "Missing value before ';'.");
+					return false;
+				}
+				if (arrayMode)
+				{
+					SetError(lineNumber, "Expected ']' before ';'.");
 					return false;
 				}
 
@@ -570,6 +632,7 @@ namespace mton
 					arrayMode = false;
 					emptyArr = false;
 					curSection->map[key] = std::move(arr);
+					arr.clear();
 				}
 				else
 				{
@@ -588,6 +651,7 @@ namespace mton
 
 			if (stringModeEnd)
 			{
+				SetError(lineNumber, "Unexpected character after string literal.");
 				return false;
 			}
 
@@ -599,12 +663,14 @@ namespace mton
 			// String모드가 아닌 Value에 공백 불가
 			if (c == ' ')
 			{
+				SetError(lineNumber, "Whitespace is not allowed outside string literal.");
 				return false;
 			}
 
 			// Array모드 종료 후 값 추가 예외처리
 			if (!arrayMode && !arr.empty())
 			{
+				SetError(lineNumber, "Unexpected character after array.");
 				return false;
 			}
 
@@ -613,11 +679,30 @@ namespace mton
 
 		if (curSection != root)
 		{
+			SetError(lineNumber, "Unclosed section.");
 			return false;
 		}
 
-		if (!isKey || stringMode || !key.empty() || !value.empty())
+		if (stringMode)
+		{
+			SetError(stringStartLine, "Unclosed string literal.");
 			return false;
+		}
+		if (!isKey)
+		{
+			SetError(lineNumber, "Expected ';' after value.");
+			return false;
+		}
+		if (!key.empty())
+		{
+			SetError(lineNumber, "Expected ':' after key.");
+			return false;
+		}
+		if (!value.empty())
+		{
+			SetError(lineNumber, "Expected ';' after value.");
+			return false;
+		}
 
 		return true;
 	}

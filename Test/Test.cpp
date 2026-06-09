@@ -37,15 +37,16 @@ int main()
 {
     mton::Object sample = mton::Parser::ParseFile("Sample.mton");
 
-    if (!sample.IsValid())
+    std::string msg;
+    if (mton::Parser::GetError(msg))
     {
-        std::cout << "Invalid config\n";
+        std::cout << msg << std::endl;
         return 1;
     }
 
 #ifdef _DEBUG
     std::cout << "---------- Debug Print ----------" << std::endl;
-    sample.DebugPrint();
+    sample.DebugPrint(); 
     std::cout << "---------- Debug Print ----------" << std::endl << std::endl;
 #endif
 
